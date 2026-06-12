@@ -115,11 +115,31 @@ A **shared library** (`.dylib` on macOS, `.so` on Linux, `.dll` on Windows) is a
 
 ---
 
+## Comment Colour Encoding (VERIFIED WORKING)
+
+Central reads the `rgba` uint32 field as raw bytes in **R, G, B, A** order (little-endian on the wire).
+Alpha is **inverted**: `A=0x00` is fully opaque, `A=0xFF` is fully transparent.
+
+Use the format `0x00BBGGRR` for opaque colours:
+
+| Colour | rgba value   |
+|--------|-------------|
+| Blue   | `0x00FF0000` |
+| Red    | `0x000000FF` |
+| Green  | `0x0000FF00` |
+| White  | `0x00FFFFFF` |
+
+The default in `NSPMarker.send()` is `0x00FF0000` (blue). See `test_colors.py` to re-verify.
+
+---
+
 ## Next Steps
 
 - [ ] Build `libcbsdk.dylib` on Mac
 - [ ] Install `pycbsdk` with numpy support and verify it loads the dylib
-- [ ] Test basic connection to NSP (verify IP/subnet config, switch setup)
+- [x] Test basic connection to NSP (verify IP/subnet config, switch setup)
+- [x] Verify comment injection end-to-end — `nsp_marker.py` confirmed working, blue comments visible in Central raster (2026-06-12)
+- [ ] Resolve SMB data transfer — Mac needs a `192.168.50.x` IP to reach Windows PC at `192.168.50.1`
 - [ ] Write a minimal PsychoPy experiment that calls `send_comment()` at key trial events
 - [ ] Verify comment timestamps align with NSP-recorded data in Central
 - [ ] Prototype continuous data streaming callback alongside PsychoPy loop

@@ -28,7 +28,7 @@ _MAX_COMMENT       = 128
 _DLEN_COMMENT      = 36       # (160 - 16) / 4  (body bytes / 4)
 
 
-def _build_comment_packet(text: str, rgba: int = 0xFFFFFFFF, charset: int = 0) -> bytes:
+def _build_comment_packet(text: str, rgba: int = 0x00FF0000, charset: int = 0) -> bytes:
     """Build a cbPKT_COMMENT UDP payload (160 bytes, little-endian)."""
     comment_bytes = text.encode("ascii", errors="replace")[: _MAX_COMMENT - 1]
     comment_field = comment_bytes + b"\x00" * (_MAX_COMMENT - len(comment_bytes))
@@ -76,12 +76,15 @@ class NSPMarker:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.connect((self.nsp_ip, self.nsp_port))
 
-    def send(self, text: str, rgba: int = 0xFFFFFFFF) -> None:
+    def send(self, text: str, rgba: int = 0x00FF0000) -> None:
         """Send a comment marker to the NSP.
 
         Args:
             text: Marker string (max 127 ASCII chars; longer strings are truncated)
-            rgba: 32-bit colour encoded as 0xRRGGBBAA (default white)
+            rgba: colour value for Central. Central reads the uint32 as raw bytes
+                  in R,G,B,A order with A=0x00 opaque, A=0xFF transparent.
+                  Format: 0x00BBGGRR for opaque colours.
+                  Default 0x00FF0000 = blue (R=0, G=0, B=255, A=0).
         """
         pkt = _build_comment_packet(text, rgba=rgba)
         if self.dry_run:
@@ -105,22 +108,42 @@ class NSPMarker:
 
 # ── quick connection test ──────────────────────────────────────────────────────
 
-def test_connection(nsp_ip: str = _NSP_IP, nsp_port: int = _NSP_PORT) -> bool:
-    """Ping the NSP and verify we can receive its heartbeat packets.
+def test_connection(
+    nsp_ip: str = _NSP_IP,
+    nsp_port: int = _NSP_PORT,
+    timeout: float = 2.0,
+    bind_ip: str = "",
+) -> bool:
+    """Listen for a UDP heartbeat from the NSP.
 
-    Returns True if NSP heartbeats are seen within 2 seconds.
+    Binds to all interfaces and filters by source IP so we only accept
+    packets that actually came from the NSP — not from other NSPs that
+    might share the same subnet on campus WiFi.
+    bind_ip is accepted for backwards compatibility but ignored.
     """
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.settimeout(2.0)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        s.settimeout(timeout)
         s.bind(("", nsp_port))
-        data, addr = s.recvfrom(256)
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            s.settimeout(remaining)
+            data, addr = s.recvfrom(256)
+            if addr[0] == nsp_ip:
+                s.close()
+                print(f"NSP reachable — got {len(data)}-byte heartbeat from {addr[0]}")
+                return True
+            # packet from wrong source or interface — keep waiting
         s.close()
-        print(f"NSP reachable — got {len(data)}-byte packet from {addr[0]}")
-        return True
+        print(f"NSP not reachable — no heartbeat from {nsp_ip} within {timeout:.0f}s")
+        return False
     except socket.timeout:
-        print(f"NSP not reachable — no packets on {nsp_ip}:{nsp_port} within 2s")
+        print(f"NSP not reachable — no heartbeat from {nsp_ip} within {timeout:.0f}s")
         return False
     except Exception as e:
         print(f"NSP check failed: {e}")
@@ -134,9 +157,9 @@ if __name__ == "__main__":
         with NSPMarker() as m:
             m.send("cerelink_test_1")
             time.sleep(0.1)
-            m.send("cerelink_test_2", rgba=0xFF0000FF)
+            m.send("cerelink_test_2")
             time.sleep(0.1)
-            m.send("cerelink_test_3", rgba=0x00FF00FF)
+            m.send("cerelink_test_3")
         print("Done — check Central for 3 comment events.")
     else:
         print("Skipping send (NSP unreachable).")

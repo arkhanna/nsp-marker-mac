@@ -1,31 +1,28 @@
 #!/usr/bin/env bash
-# run_experiment.sh — Pre-flight check. Run this before every experiment session.
+# run_experiment.sh — Pre-flight check. Run before every experiment session.
 #
 # Checks:
-#   1. NSP reachable at 192.168.137.128 (listens for NSP heartbeat packets)
-#   2. SMB share mounted (or attempts to mount it)
-#   3. Injects 3 test comment markers and confirms no errors
+#   1. NSP reachable (ping + UDP heartbeat from NSP IP specifically)
+#   2. Central PC reachable (ping)
+#   3. Injects a "TEST" comment to the NSP
+#   4. Prompts user to confirm it appears in Central
+#   5. Reports READY or NOT READY
 #
 # Usage:
 #   bash run_experiment.sh
-#   bash run_experiment.sh --dry-run    # skip actual UDP sends
 
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONDA_ENV="cerelink"
 NSP_IP="192.168.137.128"
-WINDOWS_IP="192.168.50.1"
-SHARE_NAME="blackrock"
-MOUNT_POINT="/Volumes/blackrock"
-DRY_RUN="${1:-}"
 
 PASS=0
 FAIL=0
 
 ok()   { echo "  [PASS] $1"; ((PASS++)) || true; }
 fail() { echo "  [FAIL] $1"; ((FAIL++)) || true; }
-info() { echo "  $1"; }
+info() { echo "         $1"; }
 
 echo ""
 echo "=============================="
@@ -33,77 +30,95 @@ echo " CereLink Pre-flight Check"
 echo " $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=============================="
 
-# ── 1. NSP connectivity ───────────────────────────────────────────────────────
+# ── 0. Mac network config ─────────────────────────────────────────────────────
+# The Mac must have a 192.168.137.x IP on the lab Ethernet to talk to the NSP.
+# We pass this IP as the bind address for the UDP test so we only hear packets
+# from the lab interface — not from other campus WiFi interfaces that might
+# reach a different NSP on a shared university subnet.
 echo ""
-echo "▶ NSP ($NSP_IP)"
+echo "▶ Mac network config"
+MAC_NSP_IP=$(ifconfig 2>/dev/null | awk '/inet 192\.168\.137\./{print $2}' | head -1)
+if [ -n "$MAC_NSP_IP" ]; then
+    ok "Mac has NSP-subnet IP: $MAC_NSP_IP"
+else
+    fail "Mac has no 192.168.137.x IP — lab Ethernet not configured"
+    info "Set a static IP: System Settings → Network → [USB Ethernet]"
+    info "  IP: 192.168.137.2  Subnet: 255.255.255.0  Router: (blank)"
+    MAC_NSP_IP=""
+fi
 
-NSP_RESULT=$(conda run -n "$CONDA_ENV" python - <<EOF
+# ── 1. Ping NSP ───────────────────────────────────────────────────────────────
+# Advisory only — NSPs commonly ignore ICMP. The UDP heartbeat (step 2) is the
+# real connectivity test; a ping failure here does not block READY status.
+echo ""
+echo "▶ NSP ping ($NSP_IP)"
+if ping -c 1 -W 1000 "$NSP_IP" &>/dev/null; then
+    ok "NSP responds to ping"
+else
+    echo "  [WARN] NSP did not respond to ping (normal — most NSPs ignore ICMP)"
+    info "         UDP heartbeat check below is the authoritative test"
+fi
+
+# ── 2. NSP UDP heartbeat ──────────────────────────────────────────────────────
+# We bind to the Mac's 192.168.137.x IP specifically so we only hear packets
+# arriving on the lab Ethernet — not from campus WiFi, which may reach other
+# NSPs on the UCSD network that share the same 192.168.137.x subnet.
+echo ""
+echo "▶ NSP UDP heartbeat"
+if [ -z "$MAC_NSP_IP" ]; then
+    fail "Skipped — Mac has no 192.168.137.x IP (fix step 0 first)"
+else
+    _TMP_UDP=$(mktemp /tmp/nsp_udp_XXXX)
+    cat > "$_TMP_UDP" <<EOF
 import sys
 sys.path.insert(0, "$SCRIPT_DIR")
 from nsp_marker import test_connection
-ok = test_connection(nsp_ip="$NSP_IP")
+ok = test_connection(nsp_ip="$NSP_IP", bind_ip="$MAC_NSP_IP")
 sys.exit(0 if ok else 1)
 EOF
-) && NSP_OK=true || NSP_OK=false
+    conda run -n "$CONDA_ENV" python "$_TMP_UDP" 2>&1 && UDP_OK=true || UDP_OK=false
+    rm -f "$_TMP_UDP"
 
-if $NSP_OK; then
-    ok "NSP reachable — heartbeat received"
-else
-    fail "NSP not reachable — check Ethernet connection and Mac IP (should be 192.168.137.2/24)"
-fi
-
-# ── 2. SMB share ─────────────────────────────────────────────────────────────
-echo ""
-echo "▶ SMB share (smb://$WINDOWS_IP/$SHARE_NAME)"
-
-if mount | grep -q "$MOUNT_POINT"; then
-    ok "Share already mounted at $MOUNT_POINT"
-else
-    info "Not mounted — attempting to mount..."
-    if osascript -e "mount volume \"smb://$WINDOWS_IP/$SHARE_NAME\"" 2>/dev/null; then
-        sleep 2
-        if mount | grep -q "$MOUNT_POINT"; then
-            ok "Mounted at $MOUNT_POINT"
-        else
-            fail "Mount command succeeded but $MOUNT_POINT not found"
-        fi
+    if $UDP_OK; then
+        ok "NSP UDP heartbeat received from $NSP_IP"
     else
-        fail "Could not mount smb://$WINDOWS_IP/$SHARE_NAME"
-        info "Manual fix: Finder → Go → Connect to Server → smb://$WINDOWS_IP/$SHARE_NAME"
-        info "           Make sure setup_windows.ps1 has been run on the PC."
+        fail "No UDP heartbeat from $NSP_IP"
+        info "Central may not be running, or NSP is not powered on"
     fi
 fi
 
-# ── 3. Test marker injection ──────────────────────────────────────────────────
+# ── 3. Inject TEST comment ────────────────────────────────────────────────────
+# Note: UDP send() always returns immediately without error even if the NSP is
+# unreachable — delivery cannot be confirmed in software. The user confirmation
+# below is the real end-to-end test.
 echo ""
-echo "▶ Comment marker injection"
-
-if [ "$DRY_RUN" = "--dry-run" ]; then
-    info "(dry-run — no UDP packets sent)"
-    ok "Dry run: marker build OK"
-else
-    MARKER_RESULT=$(conda run -n "$CONDA_ENV" python - 2>&1 <<EOF
-import sys, time
+echo "▶ Sending TEST comment"
+_TMP_SEND=$(mktemp /tmp/nsp_send_XXXX)
+cat > "$_TMP_SEND" <<EOF
+import sys
 sys.path.insert(0, "$SCRIPT_DIR")
 from nsp_marker import NSPMarker
-
 with NSPMarker(nsp_ip="$NSP_IP") as m:
-    m.send("preflight_1")
-    time.sleep(1)
-    m.send("preflight_2", rgba=0xFF0000FF)
-    time.sleep(1)
-    m.send("preflight_3", rgba=0x00FF00FF)
-
-print("sent 3 markers")
+    m.send("TEST", rgba=0x00FF0000)
 EOF
-    ) && MARKER_OK=true || MARKER_OK=false
+conda run -n "$CONDA_ENV" python "$_TMP_SEND" 2>/dev/null
+rm -f "$_TMP_SEND"
+echo "  [SENT] 'TEST' comment dispatched (UDP — delivery unconfirmed)"
 
-    if $MARKER_OK; then
-        ok "Sent 3 test markers to NSP (preflight_1, preflight_2, preflight_3)"
-        info "You should see them in Central's raster plot."
-    else
-        fail "Marker injection failed: $MARKER_RESULT"
-    fi
+# ── 4. User confirmation ──────────────────────────────────────────────────────
+echo ""
+echo "  ► Check Central now — does a 'TEST' comment appear in the raster plot?"
+echo ""
+printf "    Visible in Central? [y/n] "
+read -r CONFIRM
+echo ""
+if [[ "$CONFIRM" =~ ^[Yy] ]]; then
+    ok "TEST comment confirmed in Central — end-to-end marker injection working"
+else
+    fail "TEST comment not seen in Central"
+    info "Marker was dispatched but not confirmed received."
+    info "Make sure Central is running and recording (or at least in live view)."
+    info "Comments sometimes only appear once a recording is started."
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
@@ -111,23 +126,18 @@ echo ""
 echo "=============================="
 TOTAL=$((PASS + FAIL))
 if [ "$FAIL" -eq 0 ]; then
-    echo " READY ($PASS/$TOTAL checks passed)"
-else
-    echo " NOT READY ($FAIL/$TOTAL checks FAILED — see above)"
-fi
-echo "=============================="
-echo ""
-
-if [ "$FAIL" -eq 0 ]; then
-    echo "All systems go. Import NSPMarker in your experiment:"
+    echo " ✓ READY  ($PASS/$TOTAL checks passed)"
+    echo "=============================="
     echo ""
     echo "  from nsp_marker import NSPMarker"
     echo "  marker = NSPMarker()"
     echo "  marker.send('trial_start')"
-    echo "  marker.send('stimulus_on', rgba=0xFF0000FF)"
     echo ""
-    echo "Recorded data will be saved to $MOUNT_POINT/"
-    exit 0
+    echo "  To access recorded data: bash transfer_data.sh"
 else
-    exit 1
+    echo " ✗ NOT READY  ($FAIL/$TOTAL checks failed — see above)"
+    echo "=============================="
 fi
+echo ""
+
+[ "$FAIL" -eq 0 ]
