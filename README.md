@@ -46,7 +46,7 @@ cerelink/
 ├── read_nev.py              # NEV file reader with GUI file picker
 ├── setup_mac.sh             # One-time Mac installation script
 ├── setup_windows.ps1        # One-time Windows PC configuration script
-└── run_experiment.sh        # Pre-flight check — run before each session
+└── test_nsp_connection.sh   # Pre-flight check — run before each session
 ```
 
 ---
@@ -99,7 +99,7 @@ cerelink/
 Before each session, run the pre-flight check from the Mac:
 
 ```bash
-bash run_experiment.sh
+bash test_nsp_connection.sh
 ```
 
 This will:
@@ -161,6 +161,15 @@ for ev in seg.events:
 ```
 
 **Which file has the comments?** Only the NSP file (e.g. `NSP-*.nev`). The Hub file (`Hub1-*.nev`) records electrode channel data but not comment markers.
+
+---
+
+## Roadmap
+
+- [ ] Named colours in `marker.send()` — e.g. `marker.send("stim_on", color="red")` instead of requiring raw `rgba` values
+- [ ] PsychoPy Builder component — drag-and-drop Code component template for common trial events
+- [ ] Verify comment timestamps align with NSP-recorded neural data in offline analysis
+- [ ] Prototype continuous neural data streaming callback alongside PsychoPy loop
 
 ---
 
