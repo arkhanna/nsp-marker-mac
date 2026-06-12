@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# run_experiment.sh — Pre-flight check. Run before every experiment session.
+# test_nsp_connection.sh — Pre-flight check. Run before every experiment session.
 #
 # Checks:
-#   1. NSP reachable (ping + UDP heartbeat from NSP IP specifically)
-#   2. Central PC reachable (ping)
-#   3. Injects a "TEST" comment to the NSP
-#   4. Prompts user to confirm it appears in Central
-#   5. Reports READY or NOT READY
+#   1. Mac has a 192.168.137.x IP on the lab Ethernet
+#   2. NSP responds to ping
+#   3. NSP UDP heartbeat received
+#   4. Injects a "TEST" comment and prompts user to confirm it appears in Central
 #
 # Usage:
-#   bash run_experiment.sh
+#   bash test_nsp_connection.sh
 
 set -uo pipefail
 
@@ -26,7 +25,7 @@ info() { echo "         $1"; }
 
 echo ""
 echo "=============================="
-echo " nsp-marker: Pre-flight Check"
+echo " nsp-marker-mac: Pre-flight Check"
 echo " $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=============================="
 

@@ -180,10 +180,18 @@ for ev in seg.events:
 
 ## Roadmap
 
+### nsp-marker-mac (current scope)
 - [ ] Named colours in `marker.send()` — e.g. `marker.send("stim_on", color="red")` instead of requiring raw `rgba` values
 - [ ] PsychoPy Builder component — drag-and-drop Code component template for common trial events
 - [ ] Verify comment timestamps align with NSP-recorded neural data in offline analysis
-- [ ] Prototype continuous neural data streaming callback alongside PsychoPy loop
+
+### cerelink-mac (future — full SDK integration)
+These require building `libcbsdk.dylib` and a `pycbsdk` session in `CENTRAL_COMPAT` mode, which attaches read-only to Central's shared memory without conflicting with Central's NSP ownership.
+
+- [ ] Real-time neural data streaming into PsychoPy (continuous LFP / spike callbacks)
+- [ ] Query recording state — check programmatically whether Central is actively recording before a trial starts
+- [ ] Digital/TTL output — send hardware sync pulses alongside comment markers
+- [ ] Closed-loop experiments — trigger stimuli or adjust parameters based on incoming spike rates
 
 ---
 
