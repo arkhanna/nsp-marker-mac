@@ -24,17 +24,44 @@ echo " $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=============================="
 echo ""
 
-# ── 1. Check PC reachable ─────────────────────────────────────────────────────
-echo "▶ Central PC ($WINDOWS_IP)"
-if ! ping -c 1 -W 1000 "$WINDOWS_IP" &>/dev/null; then
+# ── 1. Ensure Mac has a 192.168.50.x IP to reach the PC ──────────────────────
+echo "▶ Mac network config (192.168.50.x alias)"
+if ifconfig 2>/dev/null | grep -q "inet 192\.168\.50\."; then
+    echo "  [OK] 192.168.50.x alias already configured"
+else
+    # Find the interface that has the lab Ethernet (192.168.137.x)
+    LAB_IFACE=$(ifconfig 2>/dev/null | awk '/^[a-z][^ ]*:/{iface=$1} /inet 192\.168\.137\./{gsub(/:$/,"",iface); print iface}' | head -1)
+    if [ -z "$LAB_IFACE" ]; then
+        echo "  [FAIL] Could not find lab Ethernet interface (no 192.168.137.x IP)"
+        echo "         Plug in the Ethernet cable and set a static IP first."
+        exit 1
+    fi
+    echo "  Adding 192.168.50.2 alias to $LAB_IFACE (requires sudo)..."
+    if sudo ifconfig "$LAB_IFACE" alias 192.168.50.2 255.255.255.0; then
+        echo "  [OK] Alias 192.168.50.2 added to $LAB_IFACE (temporary — gone after reboot)"
+    else
+        echo "  [FAIL] Could not add alias — try manually:"
+        echo "         sudo ifconfig $LAB_IFACE alias 192.168.50.2 255.255.255.0"
+        exit 1
+    fi
+fi
+
+# ── 2. Check PC reachable (SMB port 445) ─────────────────────────────────────
+# Ping is blocked by Windows Firewall by default — check TCP port 445 instead.
+echo ""
+echo "▶ Central PC ($WINDOWS_IP port 445)"
+if nc -z -w 2 "$WINDOWS_IP" 445 2>/dev/null; then
+    echo "  [OK] Central PC reachable (SMB port 445 open)"
+elif ping -c 1 -W 1000 "$WINDOWS_IP" &>/dev/null; then
+    echo "  [OK] Central PC reachable (ping) — port 445 closed, check Windows file sharing"
+else
     echo "  [FAIL] Central PC not reachable at $WINDOWS_IP"
-    echo "         Check that the PC is on and connected to the switch,"
-    echo "         and that setup_windows.ps1 has been run."
+    echo "         Check: PC is on, NIC 2 is set to 192.168.50.1/24, connected to switch"
+    echo "         Check: Windows file sharing is enabled (Control Panel → Network → Sharing)"
     exit 1
 fi
-echo "  [OK] Central PC reachable"
 
-# ── 2. Mount share if not already mounted ────────────────────────────────────
+# ── 3. Mount share if not already mounted ────────────────────────────────────
 echo ""
 echo "▶ SMB share (smb://$WINDOWS_IP/$SHARE_NAME)"
 if mount | grep -q "$MOUNT_POINT"; then
@@ -61,7 +88,7 @@ else
     fi
 fi
 
-# ── 3. List recent sessions ───────────────────────────────────────────────────
+# ── 4. List recent sessions ───────────────────────────────────────────────────
 echo ""
 echo "▶ Recent recordings in $MOUNT_POINT"
 SESSIONS=$(find "$MOUNT_POINT" -name "*.nev" 2>/dev/null | sort -r | head -10)
@@ -73,7 +100,7 @@ else
     done
 fi
 
-# ── 4. Open Finder or NEV reader ──────────────────────────────────────────────
+# ── 5. Open Finder or NEV reader ──────────────────────────────────────────────
 echo ""
 if [ "$MODE" = "--read" ]; then
     echo "Launching NEV file reader..."
