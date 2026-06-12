@@ -113,13 +113,15 @@ If all checks pass, you're ready to record.
 
 ## Using nsp_marker in Any Python Environment
 
-`nsp_marker` has no dependencies beyond the Python standard library. To make it available in any conda or venv environment:
+`nsp_marker` has no dependencies beyond the Python standard library. Install it in any conda or venv environment:
 
 ```bash
-pip install -e /Users/a4khanna/Documents/Projects/cerelink-claude
-```
+# From GitHub (any machine — always pulls the latest version)
+pip install git+https://github.com/arkhanna/nsp-marker.git
 
-The `-e` flag is an editable install — all environments point at the single source file in this repo, so any updates to `nsp_marker.py` are immediately reflected everywhere without reinstalling.
+# Or as an editable local install (changes to nsp_marker.py apply immediately)
+pip install -e /path/to/nsp-marker
+```
 
 ---
 
