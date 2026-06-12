@@ -26,7 +26,7 @@ info() { echo "         $1"; }
 
 echo ""
 echo "=============================="
-echo " CereLink Pre-flight Check"
+echo " nsp-marker: Pre-flight Check"
 echo " $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=============================="
 

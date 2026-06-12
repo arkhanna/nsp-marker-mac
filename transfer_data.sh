@@ -19,7 +19,7 @@ MODE="${1:-}"
 
 echo ""
 echo "=============================="
-echo " CereLink Data Transfer"
+echo " nsp-marker: Data Transfer"
 echo " $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=============================="
 echo ""

@@ -1,4 +1,4 @@
-# CereLink + PsychoPy Integration Project
+# nsp-marker
 
 ## Goal
 

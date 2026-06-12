@@ -1,4 +1,4 @@
-# CereLink + PsychoPy Integration
+# nsp-marker
 
 Send timestamped event markers from a Mac to a Blackrock NSP during behavioral experiments, and access the recorded neural data over the same network.
 
