@@ -84,18 +84,14 @@ SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 \
     conda run -n "$CONDA_ENV" pip install -e "$CERELINK_SRC/pycbsdk[numpy]"
 ok "pycbsdk installed"
 
-# ── 8. Install Python dependencies ───────────────────────────────────────────
-header "Installing Python dependencies"
-conda run -n "$CONDA_ENV" pip install neo
-ok "neo installed"
-
-# ── 9. Verify ─────────────────────────────────────────────────────────────────
+# ── 8. Verify ─────────────────────────────────────────────────────────────────
 header "Verifying installation"
 conda run -n "$CONDA_ENV" python - <<'EOF'
-import importlib, sys
-for pkg in ("neo", "numpy"):
-    importlib.import_module(pkg)
-    print(f"  [OK] {pkg}")
+import importlib
+
+# Check numpy (pulled in by pycbsdk[numpy])
+importlib.import_module("numpy")
+print("  [OK] numpy")
 
 # Check pycbsdk loads and finds the dylib
 try:
@@ -104,9 +100,9 @@ try:
 except Exception as e:
     print(f"  [WARN] pycbsdk load issue (non-fatal): {e}")
 
-# Check nsp_marker
+# Check nsp_marker (stdlib only — no install needed)
 import socket
-print("  [OK] socket (raw UDP marker sender)")
+print("  [OK] socket (nsp_marker raw UDP)")
 EOF
 
 # ── Done ──────────────────────────────────────────────────────────────────────
@@ -124,4 +120,4 @@ echo "    Subnet Mask: 255.255.255.0"
 echo "    Router     : (leave blank)"
 echo ""
 echo "Then connect the Mac to the network switch and run:"
-echo "  bash run_experiment.sh"
+echo "  bash test_nsp_connection.sh"
