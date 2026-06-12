@@ -111,6 +111,18 @@ If all checks pass, you're ready to record.
 
 ---
 
+## Using nsp_marker in Any Python Environment
+
+`nsp_marker` has no dependencies beyond the Python standard library. To make it available in any conda or venv environment:
+
+```bash
+pip install -e /Users/a4khanna/Documents/Projects/cerelink-claude
+```
+
+The `-e` flag is an editable install — all environments point at the single source file in this repo, so any updates to `nsp_marker.py` are immediately reflected everywhere without reinstalling.
+
+---
+
 ## Sending Markers from PsychoPy
 
 ```python
