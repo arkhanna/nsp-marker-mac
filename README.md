@@ -1,4 +1,4 @@
-# nsp-marker
+# nsp-marker-mac
 
 Send timestamped event markers from a Mac to a Blackrock NSP during behavioral experiments, and access the recorded neural data over the same network.
 
@@ -117,7 +117,7 @@ If all checks pass, you're ready to record.
 
 ```bash
 # From GitHub (any machine — always pulls the latest version)
-pip install git+https://github.com/arkhanna/nsp-marker.git
+pip install git+https://github.com/arkhanna/nsp-marker-mac.git
 
 # Or as an editable local install (changes to nsp_marker.py apply immediately)
 pip install -e /path/to/nsp-marker

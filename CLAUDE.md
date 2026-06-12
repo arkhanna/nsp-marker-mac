@@ -1,4 +1,4 @@
-# nsp-marker
+# nsp-marker-mac
 
 ## Goal
 
