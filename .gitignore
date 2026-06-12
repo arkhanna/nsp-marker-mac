@@ -30,3 +30,6 @@ dist/
 # Conda / virtualenv
 .conda/
 .env
+
+# Claude Code working notes
+CLAUDE.md
