@@ -61,7 +61,7 @@ fi
 # ── 2. NSP UDP heartbeat ──────────────────────────────────────────────────────
 # We bind to the Mac's 192.168.137.x IP specifically so we only hear packets
 # arriving on the lab Ethernet — not from campus WiFi, which may reach other
-# NSPs on the UCSD network that share the same 192.168.137.x subnet.
+# NSPs on the same campus or building network that share the same 192.168.137.x subnet.
 echo ""
 echo "▶ NSP UDP heartbeat"
 if [ -z "$MAC_NSP_IP" ]; then
