@@ -44,6 +44,7 @@ cerelink/
 ├── CereLink-master/         # Blackrock SDK (C++ source + pycbsdk Python wrapper)
 ├── nsp_marker.py            # Raw UDP comment sender (main experiment API)
 ├── read_nev.py              # NEV file reader with GUI file picker
+├── test_send_at.py          # send_at() timing tests and comparison; no NSP needed
 ├── setup_mac.sh             # One-time Mac installation script
 ├── setup_windows.ps1        # One-time Windows PC configuration script
 └── test_nsp_connection.sh   # Pre-flight check — run before each session
@@ -147,6 +148,23 @@ marker.close()
 **Colour encoding:** `rgba` is a 32-bit integer `0xRRGGBBAA`. Assigning distinct colours to event types makes them easy to identify in Central's raster plot and in offline analysis.
 
 **Marker text** is truncated to 127 ASCII characters. Keep labels short and consistent — they become searchable fields in the NEV file.
+
+### Timing: send at the moment of the event
+
+The NSP stamps each comment with its own clock **when the packet arrives**, so a comment is only as accurate as the moment it is sent.
+
+- **Events you schedule ahead** (a sound set to start at a known time, a screen flip at a known frame): use `send_at()`, not `time.sleep()` followed by `send()`. macOS oversleeps `time.sleep()` by several milliseconds. On an Apple Silicon MacBook Pro, sleep-then-send landed a median 3–4 ms late (max 5 ms), while `send_at()` was within 0.1 ms. It sleeps until 10 ms before the target, then watches the clock.
+
+  ```python
+  import time
+  t_stim = time.perf_counter() + 0.5            # when the stimulus will start
+  marker.send_at("stim_on", when=t_stim)        # blocks until then; run it on a thread to keep the task free
+  ```
+
+  `when` is on `time.perf_counter()` by default; pass `clock=` to use another clock, such as PsychoPy's `core.getTime` or Psychtoolbox's `GetSecs`.
+- **Events that have already happened** (a key press read after the fact): the comment goes out late by however long it took to notice. Put the event's own time in the text, e.g. `marker.send(f"key t={t_press:.4f}")`, and log the `perf_counter()` time that `send()` returns. A linear fit of NSP time against send time maps every logged event time onto the NSP clock offline.
+
+`python test_send_at.py` measures both approaches on your Mac with no NSP connected.
 
 ---
 
