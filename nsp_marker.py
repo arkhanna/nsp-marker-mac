@@ -13,6 +13,9 @@ Usage:
     # Or as a context manager:
     with NSPMarker() as marker:
         marker.send("trial_start")
+
+    # At a precise future time on time.perf_counter() (the NSP stamps comments on arrival):
+    marker.send_at("stimulus_on", when=t_stim)
 """
 
 import socket
@@ -26,6 +29,23 @@ _CHAN_CONFIGURATION = 0x8000   # cbPKTCHAN_CONFIGURATION
 _PKT_COMMENTSET    = 0x00B1   # cbPKTTYPE_COMMENTSET
 _MAX_COMMENT       = 128
 _DLEN_COMMENT      = 36       # (160 - 16) / 4  (body bytes / 4)
+
+# send_at() sleeps until this long before the target time, then watches the clock.
+# macOS oversleeps time.sleep() and timed waits by several ms, so sleeping straight to
+# the target lands late. Measured on an Apple Silicon MacBook Pro (macOS 26) with
+# test_send_at.py: time.sleep() then send() was a median 3-4 ms late (max 5 ms), and a
+# 3 ms spin margin still up to 2.2 ms late. With 10 ms, sends were within 0.1 ms. The
+# cost is up to 10 ms of one busy CPU core per scheduled send.
+SPIN_S = 0.010
+
+
+def wait_until(when: float, clock=time.perf_counter, spin_s: float = SPIN_S) -> None:
+    """Block until clock() >= when: sleep for most of the wait, then spin for the last spin_s."""
+    remaining = when - clock() - spin_s
+    if remaining > 0:
+        time.sleep(remaining)
+    while clock() < when:
+        pass
 
 
 def _build_comment_packet(text: str, rgba: int = 0x00FF0000, charset: int = 0) -> bytes:
@@ -76,7 +96,7 @@ class NSPMarker:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.connect((self.nsp_ip, self.nsp_port))
 
-    def send(self, text: str, rgba: int = 0x00FF0000) -> None:
+    def send(self, text: str, rgba: int = 0x00FF0000) -> float:
         """Send a comment marker to the NSP.
 
         Args:
@@ -85,14 +105,38 @@ class NSPMarker:
                   in R,G,B,A order with A=0x00 opaque, A=0xFF transparent.
                   Format: 0x00BBGGRR for opaque colours.
                   Default 0x00FF0000 = blue (R=0, G=0, B=255, A=0).
+
+        Returns:
+            time.perf_counter() just before the packet was handed to the socket.
+            The NSP stamps the comment when it arrives, so log this to align
+            the Mac's clock with the NSP's offline.
         """
         pkt = _build_comment_packet(text, rgba=rgba)
+        t_sent = time.perf_counter()
         if self.dry_run:
             print(f"[dry_run] would send {len(pkt)}-byte comment: {text!r}  rgba=0x{rgba:08X}")
         else:
             if self._sock is None:
                 self._open_socket()
             self._sock.send(pkt)
+        return t_sent
+
+    def send_at(self, text: str, when: float, rgba: int = 0x00FF0000, clock=time.perf_counter) -> float:
+        """Send a comment at a precise future time, for events scheduled ahead
+        (e.g. a sound scheduled to start at a known time).
+
+        The NSP timestamps a comment when it arrives, so a comment is only as
+        accurate as the moment it is sent. This blocks until `when` (on `clock`,
+        time.perf_counter() by default), then sends. A `when` in the past sends
+        at once. To avoid blocking a task, call it from a background thread.
+
+        Returns the clock time the packet was sent; compare it with `when` to
+        log how late it went out.
+        """
+        wait_until(when, clock=clock)
+        t_sent = clock()
+        self.send(text, rgba=rgba)
+        return t_sent
 
     def close(self):
         if self._sock:
